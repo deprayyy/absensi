@@ -6,19 +6,34 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
         Schema::create('attendances', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->enum('type', ['masuk', 'pulang']);
-            $table->decimal('latitude', 10, 7);
-            $table->decimal('longitude', 10, 7);
-            $table->string('photo')->nullable();
+
+            // Relasi ke user
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+
+            // Relasi ke office (nullable supaya kalau kantor dihapus, attendance tidak ikut hilang)
+            $table->foreignId('office_id')->nullable()->constrained('offices')->nullOnDelete();
+
+            // Tanggal absen
+            $table->date('date');
+
+            // Jam absen masuk & pulang
+            $table->timestamp('clock_in')->nullable();
+            $table->timestamp('clock_out')->nullable();
+
             $table->timestamps();
         });
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
         Schema::dropIfExists('attendances');

@@ -2,79 +2,133 @@
 
 namespace App\Http\Controllers\API;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Attendance;
 use App\Models\Office;
+use Illuminate\Http\Request;
+use Carbon\Carbon;
 
-class AttendanceController extends Controller
+class AttendanceController 
 {
-    public function history(Request $request)
-{
-    $attendances = $request->user()->attendances()->orderBy('created_at', 'desc')->get();
-
-    return response()->json([
-        'message' => 'Riwayat absensi',
-        'data' => $attendances
-    ]);
-}
-
-    public function store(Request $request)
+    /**
+     * Hitung jarak (dalam meter) antara 2 titik koordinat.
+     */
+    private function getDistance($lat1, $lon1, $lat2, $lon2)
     {
-        $request->validate([
-            'type' => 'required|in:masuk,pulang',
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'photo' => 'nullable|image|max:2048'
-        ]);
+        $earthRadius = 6371000; // radius bumi dalam meter
 
-        // Cek lokasi kantor pertama (dummy dulu)
-        $office = Office::first();
+        $lat1 = deg2rad($lat1);
+        $lat2 = deg2rad($lat2);
+        $deltaLat = $lat2 - $lat1;
+        $deltaLon = deg2rad($lon2 - $lon1);
+
+        $a = sin($deltaLat / 2) ** 2 + cos($lat1) * cos($lat2) * sin($deltaLon / 2) ** 2;
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadius * $c;
+    }
+
+    /**
+     * Absen Masuk (Clock In)
+     */
+    public function clockIn(Request $request)
+    {
+        $user = $request->user();
+        $today = Carbon::today()->toDateString();
+
+        $office = Office::first(); // ambil kantor pertama (atau sesuai user jika multi kantor)
         if (!$office) {
-            return response()->json(['message' => 'Tidak ada kantor terdaftar'], 400);
+            return response()->json(['message' => 'Office location not found'], 404);
         }
 
-        $distance = $this->calculateDistance(
-            $office->latitude,
-            $office->longitude,
-            $request->latitude,
-            $request->longitude
-        );
+        $userLat = $request->input('latitude');
+        $userLon = $request->input('longitude');
 
-        if ($distance > 100) { // lebih dari 100 meter
-            return response()->json(['message' => 'Anda berada di luar area kantor!'], 403);
+        if (!$userLat || !$userLon) {
+            return response()->json(['message' => 'Location is required'], 400);
         }
 
-        $photoPath = null;
-        if ($request->hasFile('photo')) {
-            $photoPath = $request->file('photo')->store('attendances', 'public');
+        // Hitung jarak
+        $distance = $this->getDistance($userLat, $userLon, $office->latitude, $office->longitude);
+        if ($distance > 100) { // 100 meter radius
+            return response()->json([
+                'message' => 'You are too far from the office location to clock in',
+                'distance' => round($distance, 2)
+            ], 403);
         }
 
+        // Cek apakah user sudah absen masuk hari ini
+        $existing = Attendance::where('user_id', $user->id)
+            ->where('date', $today)
+            ->first();
+
+        if ($existing) {
+            return response()->json(['message' => 'You have already clocked in today'], 409);
+        }
+
+        // Simpan absen masuk
         $attendance = Attendance::create([
-            'user_id' => $request->user()->id,
-            'type' => $request->type,
-            'latitude' => $request->latitude,
-            'longitude' => $request->longitude,
-            'photo' => $photoPath,
+            'user_id' => $user->id,
+            'office_id' => $office->id,
+            'date' => $today,
+            'clock_in' => Carbon::now(),
         ]);
 
         return response()->json([
-            'message' => 'Absensi berhasil',
-            'data' => $attendance
+            'message' => 'Clock-in successful',
+            'data' => $attendance,
         ]);
     }
 
-    private function calculateDistance($lat1, $lon1, $lat2, $lon2)
+    /**
+     * Absen Pulang (Clock Out)
+     */
+    public function clockOut(Request $request)
     {
-        $earthRadius = 6371000; // meters
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLon = deg2rad($lon2 - $lon1);
+        $user = $request->user();
+        $today = Carbon::today()->toDateString();
 
-        $a = sin($dLat / 2) * sin($dLat / 2) +
-             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-             sin($dLon / 2) * sin($dLon / 2);
+        $attendance = Attendance::where('user_id', $user->id)
+            ->where('date', $today)
+            ->first();
 
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-        return $earthRadius * $c;
+        if (!$attendance) {
+            return response()->json(['message' => 'You have not clocked in yet'], 404);
+        }
+
+        if ($attendance->clock_out) {
+            return response()->json(['message' => 'You have already clocked out today'], 409);
+        }
+
+        $office = Office::first();
+        $userLat = $request->input('latitude');
+        $userLon = $request->input('longitude');
+
+        // Validasi lokasi saat clock-out (opsional, bisa dihapus kalau tidak perlu)
+        if ($userLat && $userLon) {
+            $distance = $this->getDistance($userLat, $userLon, $office->latitude, $office->longitude);
+            if ($distance > 100) {
+                return response()->json([
+                    'message' => 'You are too far from the office location to clock out',
+                    'distance' => round($distance, 2)
+                ], 403);
+            }
+        }
+
+        $attendance->update([
+            'clock_out' => Carbon::now(),
+        ]);
+
+        $workDuration = null;
+        if ($attendance->clock_in) {
+            $workDuration = Carbon::parse($attendance->clock_in)
+                ->diff(Carbon::parse($attendance->clock_out))
+                ->format('%H:%I:%S');
+        }
+
+        return response()->json([
+            'message' => 'Clock-out successful',
+            'work_duration' => $workDuration,
+            'data' => $attendance,
+        ]);
     }
 }

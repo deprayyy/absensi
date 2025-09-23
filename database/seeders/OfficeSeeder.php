@@ -11,8 +11,8 @@ class OfficeSeeder extends Seeder
     {
         Office::create([
             'name' => 'Kantor Pusat',
-            'latitude' => -6.485654,   // ganti sesuai lokasi kamu
-            'longitude' => 106.841987, // ganti sesuai lokasi kamu
+            'latitude' => -6.236364774146748,   // ganti sesuai lokasi kamu
+            'longitude' => 106.82557096084179, // ganti sesuai lokasi kamu
         ]);
     }
 }

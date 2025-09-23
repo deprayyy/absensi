@@ -14,20 +14,20 @@ class User extends Authenticatable
     /**
      * Kolom yang bisa diisi mass-assignment
      *
-     * @var list<string>
+     * @var array<int, string>
      */
     protected $fillable = [
         'name',
         'email',
         'password',
-        'role',         // admin / user
-        'photo',        // foto profil / foto absensi terakhir
+        'role',
+        'photo',
     ];
 
     /**
      * Kolom yang harus disembunyikan saat return JSON
      *
-     * @var list<string>
+     * @var array<int, string>
      */
     protected $hidden = [
         'password',

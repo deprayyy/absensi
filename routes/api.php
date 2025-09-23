@@ -15,17 +15,17 @@ Route::get('/ping', function () {
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
+    // 🏢 Office
+    Route::get('/offices', [OfficeController::class, 'index']);
+    Route::post('/offices', [OfficeController::class, 'store']);
+
 // ✅ Protected Routes (wajib pakai token Bearer)
 Route::middleware('auth:sanctum')->group(function () {
 
     // 🔑 Auth
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // 🏢 Office
-    Route::get('/offices', [OfficeController::class, 'index']);
-    Route::post('/offices', [OfficeController::class, 'store']);
-
     // 🕒 Attendance (Absen)
-    Route::post('/attendance', [AttendanceController::class, 'store']);  // Absen masuk/pulang
-    Route::get('/attendance/history', [AttendanceController::class, 'history']); // Riwayat absen
+    Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
+    Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut']);
 });
