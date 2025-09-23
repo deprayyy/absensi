@@ -11,11 +11,14 @@ class Attendance extends Model
 
     protected $fillable = [
         'user_id',
-        'office_id',
         'date',
         'clock_in',
         'clock_out',
+        'clock_in_photo',
+        'clock_out_photo',
+        'activity_note',
     ];
+    
 
     // Relasi ke User
     public function user()

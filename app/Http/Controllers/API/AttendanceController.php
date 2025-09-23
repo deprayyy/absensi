@@ -34,51 +34,34 @@ class AttendanceController
     {
         $user = $request->user();
         $today = Carbon::today()->toDateString();
-
-        $office = Office::first(); // ambil kantor pertama (atau sesuai user jika multi kantor)
+    
+        $office = Office::first();
         if (!$office) {
             return response()->json(['message' => 'Office location not found'], 404);
         }
-
-        $userLat = $request->input('latitude');
-        $userLon = $request->input('longitude');
-
-        if (!$userLat || !$userLon) {
-            return response()->json(['message' => 'Location is required'], 400);
-        }
-
-        // Hitung jarak
-        $distance = $this->getDistance($userLat, $userLon, $office->latitude, $office->longitude);
-        if ($distance > 100) { // 100 meter radius
-            return response()->json([
-                'message' => 'You are too far from the office location to clock in',
-                'distance' => round($distance, 2)
-            ], 403);
-        }
-
-        // Cek apakah user sudah absen masuk hari ini
-        $existing = Attendance::where('user_id', $user->id)
-            ->where('date', $today)
-            ->first();
-
-        if ($existing) {
-            return response()->json(['message' => 'You have already clocked in today'], 409);
-        }
-
-        // Simpan absen masuk
+    
+        $request->validate([
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
+            'photo' => 'required|image|max:2048',
+        ]);
+    
+        // Upload photo
+        $photoPath = $request->file('photo')->store('clock_in_photos', 'public');
+    
         $attendance = Attendance::create([
             'user_id' => $user->id,
-            'office_id' => $office->id,
             'date' => $today,
             'clock_in' => Carbon::now(),
+            'clock_in_photo' => $photoPath,
         ]);
-
+    
         return response()->json([
             'message' => 'Clock-in successful',
             'data' => $attendance,
         ]);
     }
-
+    
     /**
      * Absen Pulang (Clock Out)
      */
@@ -86,49 +69,36 @@ class AttendanceController
     {
         $user = $request->user();
         $today = Carbon::today()->toDateString();
-
+    
+        $request->validate([
+            'photo' => 'required|image|max:2048',
+            'activity_note' => 'required|string|max:1000',
+        ]);
+    
         $attendance = Attendance::where('user_id', $user->id)
-            ->where('date', $today)
+            ->whereDate('date', $today)
             ->first();
-
+    
         if (!$attendance) {
             return response()->json(['message' => 'You have not clocked in yet'], 404);
         }
-
+    
         if ($attendance->clock_out) {
             return response()->json(['message' => 'You have already clocked out today'], 409);
         }
-
-        $office = Office::first();
-        $userLat = $request->input('latitude');
-        $userLon = $request->input('longitude');
-
-        // Validasi lokasi saat clock-out (opsional, bisa dihapus kalau tidak perlu)
-        if ($userLat && $userLon) {
-            $distance = $this->getDistance($userLat, $userLon, $office->latitude, $office->longitude);
-            if ($distance > 100) {
-                return response()->json([
-                    'message' => 'You are too far from the office location to clock out',
-                    'distance' => round($distance, 2)
-                ], 403);
-            }
-        }
-
+    
+        // Upload photo
+        $photoPath = $request->file('photo')->store('clock_out_photos', 'public');
+    
         $attendance->update([
             'clock_out' => Carbon::now(),
+            'clock_out_photo' => $photoPath,
+            'activity_note' => $request->activity_note,
         ]);
-
-        $workDuration = null;
-        if ($attendance->clock_in) {
-            $workDuration = Carbon::parse($attendance->clock_in)
-                ->diff(Carbon::parse($attendance->clock_out))
-                ->format('%H:%I:%S');
-        }
-
+    
         return response()->json([
             'message' => 'Clock-out successful',
-            'work_duration' => $workDuration,
             'data' => $attendance,
         ]);
-    }
+    }    
 }
