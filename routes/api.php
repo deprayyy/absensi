@@ -11,9 +11,24 @@ Route::get('/ping', function () {
     return response()->json(['message' => 'API working!']);
 });
 
+// routes/api.php
+Route::post('/refresh', function (Request $request) {
+    $user = $request->user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    $user->tokens()->delete(); // hapus token lama
+    $token = $user->createToken('auth_token')->plainTextToken;
+
+    return response()->json(['token' => $token]);
+})->middleware('auth:sanctum');
+
 // ✅ Public Routes (tidak perlu token)
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/refresh', [AuthController::class, 'refreshToken']);
+
 
     // 🏢 Office
     Route::get('/offices', [OfficeController::class, 'index']);
